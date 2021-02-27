@@ -1,9 +1,9 @@
 package main
 
 import (
-	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/rand"
+	"bytes"
+	"crypto"
+	"encoding/pem"
 	"github.com/cpu/goacmedns"
 	"github.com/emvi/logbuch"
 	"github.com/go-acme/lego/certcrypto"
@@ -46,20 +46,28 @@ func getCertificate(req config.CertRequest) (*certificate.Resource, error) {
 
 	if user == nil {
 		registerAccount = true
-		user = &account.User{
-			Email: req.Email,
+		privateKey, privateKeyPEM, err := generatePrivateKey()
+
+		if err != nil {
+			logbuch.Error("Error creating private key for user", logbuch.Fields{"err": err})
+			return nil, err
 		}
+
+		user = &account.User{
+			Email:      req.Email,
+			PEM:        privateKeyPEM,
+			PrivateKey: privateKey,
+		}
+	} else {
+		privateKey, err := certcrypto.ParsePEMPrivateKey([]byte(user.PEM))
+
+		if err != nil {
+			logbuch.Error("Error loading account private key", logbuch.Fields{"err": err})
+			return nil, err
+		}
+
+		user.PrivateKey = privateKey
 	}
-
-	// create private key
-	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-
-	if err != nil {
-		logbuch.Error("Error creating private key for user", logbuch.Fields{"err": err})
-		return nil, err
-	}
-
-	user.PrivateKey = privateKey
 
 	// set up client
 	cfg := lego.NewConfig(user)
@@ -137,6 +145,24 @@ func getCertificate(req config.CertRequest) (*certificate.Resource, error) {
 	return certificates, nil
 }
 
+func generatePrivateKey() (crypto.PrivateKey, string, error) {
+	privateKey, err := certcrypto.GeneratePrivateKey(certcrypto.RSA4096)
+
+	if err != nil {
+		return nil, "", err
+	}
+
+	var buffer bytes.Buffer
+	pemKey := certcrypto.PEMBlock(privateKey)
+	err = pem.Encode(&buffer, pemKey)
+
+	if err != nil {
+		return nil, "", err
+	}
+
+	return privateKey, buffer.String(), nil
+}
+
 func getCertificates() {
 	requests, err := config.LoadCertRequests()
 
@@ -151,14 +177,17 @@ func getCertificates() {
 	for _, req := range requests {
 		wg.Add(1)
 		go func(req config.CertRequest) {
-			logbuch.Info("Obtaining certificate for", logbuch.Fields{"req": req})
+			logbuch.Info("Obtaining certificate", logbuch.Fields{"req": req})
 			certs, err := getCertificate(req)
 
 			if err != nil {
-				logbuch.Fatal(err.Error())
+				logbuch.Error("Error obtaining certificate", logbuch.Fields{"req": req})
+				return
+			} else {
+				// TODO save
+				log.Println(certs)
 			}
 
-			log.Println(certs)
 			wg.Done()
 		}(req)
 	}

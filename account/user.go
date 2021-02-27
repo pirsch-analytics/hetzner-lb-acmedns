@@ -9,7 +9,8 @@ import (
 type User struct {
 	Email        string                 `json:"email"`
 	Registration *registration.Resource `json:"registration"`
-	PrivateKey   crypto.PrivateKey      `json:"key"`
+	PEM          string                 `json:"pem"`
+	PrivateKey   crypto.PrivateKey      `json:"-"`
 }
 
 // GetEmail returns the email for the user.
