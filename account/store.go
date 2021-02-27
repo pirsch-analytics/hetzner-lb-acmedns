@@ -2,7 +2,6 @@ package account
 
 import (
 	"encoding/json"
-	"github.com/pirsch-analytics/hetzner-lb-acmedns/model"
 	"os"
 	"strings"
 )
@@ -13,13 +12,13 @@ const (
 
 // Store is the storage used to load and save users.
 type Store struct {
-	User []model.User `json:"user"`
+	User []User `json:"user"`
 }
 
 // NewStore creates a new store.
 func NewStore() *Store {
 	return &Store{
-		User: make([]model.User, 0),
+		User: make([]User, 0),
 	}
 }
 
@@ -54,7 +53,7 @@ func (store *Store) Save() error {
 }
 
 // Set inserts/updates given user.
-func (store *Store) Set(user *model.User) {
+func (store *Store) Set(user *User) {
 	email := strings.ToLower(user.Email)
 
 	for i, u := range store.User {
@@ -68,7 +67,7 @@ func (store *Store) Set(user *model.User) {
 }
 
 // Get returns the user for given email or nil if not found.
-func (store *Store) Get(email string) *model.User {
+func (store *Store) Get(email string) *User {
 	email = strings.ToLower(email)
 
 	for _, u := range store.User {

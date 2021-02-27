@@ -4,6 +4,7 @@ go 1.16
 
 require (
 	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
+	github.com/cpu/goacmedns v0.1.1 // indirect
 	github.com/emvi/logbuch v1.2.0
 	github.com/go-acme/lego v2.7.2+incompatible
 	github.com/miekg/dns v1.1.40 // indirect
