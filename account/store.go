@@ -37,7 +37,7 @@ func (store *Store) Load() error {
 	return nil
 }
 
-// Save saves all users currently loaded inside the store.
+// Save saves all users currently loaded on disk.
 func (store *Store) Save() error {
 	data, err := json.Marshal(store)
 

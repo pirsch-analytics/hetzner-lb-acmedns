@@ -9,9 +9,11 @@ import (
 type Cert struct {
 	certificate.Resource
 
-	PrivateKey        string    `json:"private_key"`
-	Certificate       string    `json:"certificate"`
-	IssuerCertificate string    `json:"issuer_certificate"`
-	CSR               string    `json:"csr"`
-	NextUpdate        time.Time `json:"next_update"`
+	PrivateKey        string `json:"private_key"`
+	Certificate       string `json:"certificate"`
+	IssuerCertificate string `json:"issuer_certificate"`
+	CSR               string `json:"csr"`
+
+	Hetzner    Hetzner   `json:"hetzner"`
+	NextUpdate time.Time `json:"next_update"`
 }

@@ -2,10 +2,13 @@ package account
 
 import (
 	"github.com/stretchr/testify/assert"
+	"os"
 	"testing"
 )
 
 func TestStore(t *testing.T) {
+	assert.NoError(t, os.MkdirAll("data", 0744))
+	store := NewStore()
 	store.Set(&User{
 		Email: "foo@bar.com",
 	})

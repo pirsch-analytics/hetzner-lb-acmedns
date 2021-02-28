@@ -13,49 +13,57 @@ import (
 	"github.com/go-acme/lego/providers/dns/acmedns"
 	"github.com/go-acme/lego/registration"
 	"github.com/pirsch-analytics/hetzner-lb-acmedns/account"
-	"github.com/pirsch-analytics/hetzner-lb-acmedns/config"
 	"os"
 	"sync"
 	"time"
 )
 
 const (
-	// TODO move to configuration
-	caURL      = "https://acme-staging-v02.api.letsencrypt.org/directory"
-	acmednsURL = "https://auth.emvi-acme.com/"
-	renewIn    = time.Hour * 24 * 7 * 4 * 2 // two months
+	renewIn = time.Hour * 24 * 7 * 4 * 2 // two months
 )
 
 // UpdateCertificates updates all certificates for configured certificate requests if required.
-func UpdateCertificates() {
-	requests, err := config.LoadCertRequests()
+func UpdateCertificates(caURL, acmednsURL string) {
+	requests, err := loadCertRequests()
 
 	if err != nil || requests == nil || len(requests) == 0 {
 		logbuch.Error("No certificate requests found. Please create the cert-requests.json", logbuch.Fields{"err": err})
 		return
 	}
 
-	if err := createCertificatesBackup(); err != nil {
+	if err := certStore.load(); err != nil {
+		logbuch.Error("Error loading existing certificates", logbuch.Fields{"err": err})
 		return
 	}
 
-	// TODO load existing certificates and check if update is due
+	if err := certStore.backup(); err != nil {
+		logbuch.Error("Error creating backup for certificates", logbuch.Fields{"err": err})
+		return
+	}
 
 	logbuch.Info("Obtaining certificates...")
-	certs := make([]Cert, 0, len(requests))
 	var wg sync.WaitGroup
 
 	for _, req := range requests {
 		wg.Add(1)
-		go func(req config.CertRequest) {
-			logbuch.Info("Obtaining certificate", logbuch.Fields{"req": req})
-			cert, err := obtainCertificate(req)
+		go func(req CertRequest) {
+			existingCert := certStore.get(req)
 
-			if err != nil {
-				logbuch.Error("Error obtaining certificate", logbuch.Fields{"req": req})
-				return
+			if existingCert == nil || existingCert.NextUpdate.Before(time.Now()) {
+				logbuch.Info("Obtaining certificate", logbuch.Fields{"req": req})
+				cert, err := obtainCertificate(caURL, acmednsURL, req)
+
+				if err != nil {
+					logbuch.Error("Error obtaining certificate", logbuch.Fields{"req": req})
+					return
+				} else {
+					certStore.set(cert)
+				}
 			} else {
-				certs = append(certs, *cert)
+				logbuch.Info("Skipping certificate", logbuch.Fields{
+					"req":         req,
+					"next_update": existingCert.NextUpdate,
+				})
 			}
 
 			wg.Done()
@@ -64,48 +72,32 @@ func UpdateCertificates() {
 
 	wg.Wait()
 	logbuch.Info("Done obtaining certificates")
-	saveCertificates(certs)
-}
 
-func createCertificatesBackup() error {
-	if _, err := os.Stat("data/certs.json"); err == nil {
-		logbuch.Info("Backing up old certificates...")
-		data, err := os.ReadFile("data/certs.json")
-
-		if err != nil {
-			logbuch.Error("Error reading existing certs.json", logbuch.Fields{"err": err})
-			return err
-		}
-
-		if err := os.WriteFile("data/certs_backup.json", data, 0644); err != nil {
-			logbuch.Error("Error writing certs.json backup file", logbuch.Fields{"err": err})
-			return err
-		}
-
-		logbuch.Info("Done backing up old certificates")
-	}
-
-	return nil
-}
-
-func saveCertificates(certs []Cert) {
-	logbuch.Info("Saving certificates...")
-	data, err := json.Marshal(certs)
-
-	if err != nil {
-		logbuch.Error("Error marshalling certificates", logbuch.Fields{"err": err})
-		return
-	}
-
-	if err := os.WriteFile("data/certs.json", data, 0644); err != nil {
+	if err := certStore.save(); err != nil {
 		logbuch.Error("Error saving certificates", logbuch.Fields{"err": err})
 		return
 	}
 
-	logbuch.Info("Done saving certificates")
+	// TODO upload to Hetzner
 }
 
-func obtainCertificate(req config.CertRequest) (*Cert, error) {
+func loadCertRequests() ([]CertRequest, error) {
+	data, err := os.ReadFile("data/cert-requests.json")
+
+	if err != nil {
+		return nil, err
+	}
+
+	var requests []CertRequest
+
+	if err := json.Unmarshal(data, &requests); err != nil {
+		return nil, err
+	}
+
+	return requests, nil
+}
+
+func obtainCertificate(caURL, acmednsURL string, req CertRequest) (*Cert, error) {
 	// create/load user
 	registerAccount := false
 	user := accountStore.Get(req.Email)
@@ -218,6 +210,7 @@ func obtainCertificate(req config.CertRequest) (*Cert, error) {
 		Certificate:       string(certificates.Certificate),
 		IssuerCertificate: string(certificates.IssuerCertificate),
 		CSR:               string(certificates.CSR),
+		Hetzner:           req.Hetzner,
 		NextUpdate:        time.Now().Add(renewIn),
 	}, nil
 }

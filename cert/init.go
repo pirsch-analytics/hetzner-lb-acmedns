@@ -8,6 +8,7 @@ import (
 
 var (
 	accountStore *account.Store
+	certStore    *store
 )
 
 func init() {
@@ -20,6 +21,7 @@ func init() {
 	}
 
 	accountStore = account.NewStore()
+	certStore = newStore()
 
 	if err := accountStore.Load(); err != nil {
 		logbuch.Info("Account file not found, new accounts will be created on requests", logbuch.Fields{"err": err})

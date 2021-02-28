@@ -7,6 +7,7 @@ require (
 	github.com/cpu/goacmedns v0.1.1 // indirect
 	github.com/emvi/logbuch v1.2.0
 	github.com/go-acme/lego v2.7.2+incompatible
+	github.com/hetznercloud/hcloud-go v1.23.1 // indirect
 	github.com/miekg/dns v1.1.40 // indirect
 	github.com/robfig/cron/v3 v3.0.0 // indirect
 	github.com/stretchr/testify v1.7.0 // indirect
