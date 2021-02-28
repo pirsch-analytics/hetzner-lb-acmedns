@@ -1,0 +1,14 @@
+version: "3"
+
+services:
+  hlba:
+    image: pirsch/hetzner-lb-acmedns
+    container_name: hlba
+    restart: always
+    volumes:
+      - ./data:/app/data
+    environment:
+      - HLBA_LOG_LEVEL=info
+      - HLBA_CA_URL=https://acme-staging-v02.api.letsencrypt.org/directory
+      - HLBA_ACMEDNS_URL=https://auth.example.com/
+      - HLBA_HETZNER_API_TOKEN=
