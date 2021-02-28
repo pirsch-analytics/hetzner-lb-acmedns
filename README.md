@@ -3,11 +3,11 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/pirsch-analytics/hetzner-lb-acmedns)](https://goreportcard.com/report/github.com/pirsch-analytics/hetzner-lb-acmedns)
 <a href="https://discord.gg/fAYm4Cz"><img src="https://img.shields.io/discord/739184135649886288?logo=discord" alt="Chat on Discord"></a>
 
-A service to automatically update Letsencrypt SSL certificates on the Hetzner load-balancer using [ACME-DNS](https://github.com/joohoi/acme-dns).
+A service to automatically update Letsencrypt SSL certificates on the Hetzner load-balancer using [acme-dns](https://github.com/joohoi/acme-dns).
 
 ## Installation
 
-Please see the [docker-compose.yml](docker-compose.yml) for reference. Before you can start using the service, you need to have created a project on Hetzner cloud, a load balancer, a (https) service for it, as well as a acme-dns server. You can set the following environment variables:
+Please see the [docker-compose.yml](docker-compose.yml) for reference. Before you can start using the service, you need to have created a project on Hetzner cloud, an API token, as well as a acme-dns server. You can then configure it using the following environment variables:
 
 | Variable | Description |
 | - | - |
