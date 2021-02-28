@@ -5,6 +5,7 @@ services:
     image: pirsch/hetzner-lb-acmedns
     container_name: hlba
     restart: always
+    network_mode: host
     volumes:
       - ./data:/app/data
     environment:
