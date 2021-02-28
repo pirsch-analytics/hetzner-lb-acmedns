@@ -2,6 +2,7 @@ package cert
 
 import (
 	"bytes"
+	"context"
 	"crypto"
 	"encoding/json"
 	"encoding/pem"
@@ -12,6 +13,7 @@ import (
 	"github.com/go-acme/lego/lego"
 	"github.com/go-acme/lego/providers/dns/acmedns"
 	"github.com/go-acme/lego/registration"
+	"github.com/hetznercloud/hcloud-go/hcloud"
 	"github.com/pirsch-analytics/hetzner-lb-acmedns/account"
 	"os"
 	"sync"
@@ -23,7 +25,7 @@ const (
 )
 
 // UpdateCertificates updates all certificates for configured certificate requests if required.
-func UpdateCertificates(caURL, acmednsURL string) {
+func UpdateCertificates(caURL, acmednsURL, hetznerAPIToken string) {
 	requests, err := loadCertRequests()
 
 	if err != nil || requests == nil || len(requests) == 0 {
@@ -42,6 +44,7 @@ func UpdateCertificates(caURL, acmednsURL string) {
 	}
 
 	logbuch.Info("Obtaining certificates...")
+	pushCerts := make([]Cert, 0, len(certStore.Certs))
 	var wg sync.WaitGroup
 
 	for _, req := range requests {
@@ -58,6 +61,7 @@ func UpdateCertificates(caURL, acmednsURL string) {
 					return
 				} else {
 					certStore.set(cert)
+					pushCerts = append(pushCerts, *cert)
 				}
 			} else {
 				logbuch.Info("Skipping certificate", logbuch.Fields{
@@ -78,7 +82,9 @@ func UpdateCertificates(caURL, acmednsURL string) {
 		return
 	}
 
-	// TODO upload to Hetzner
+	logbuch.Info("Pushing certificates to Hetzner...")
+	pushCertificates(hetznerAPIToken, pushCerts)
+	logbuch.Info("Done pushing certificates to Hetzner")
 }
 
 func loadCertRequests() ([]CertRequest, error) {
@@ -231,4 +237,104 @@ func generatePrivateKey() (crypto.PrivateKey, string, error) {
 	}
 
 	return privateKey, buffer.String(), nil
+}
+
+func pushCertificates(hetznerAPIToken string, certs []Cert) {
+	client := hcloud.NewClient(hcloud.WithToken(hetznerAPIToken))
+
+	for _, cert := range certs {
+		// read the load-balancer we would like to update
+		lb, _, err := client.LoadBalancer.Get(context.Background(), cert.Hetzner.LBName)
+
+		if err != nil {
+			logbuch.Error("Error reading load-balancer from Hetzner", logbuch.Fields{
+				"err":     err,
+				"name":    cert.Hetzner.Name,
+				"lb_name": cert.Hetzner.LBName,
+				"lb_port": cert.Hetzner.LBPort,
+			})
+			continue
+		}
+
+		// read the old certificate and change name if it exists
+		currentHetznerCert, _, err := client.Certificate.Get(context.Background(), cert.Hetzner.Name)
+
+		if err != nil {
+			logbuch.Error("Error reading certificate from Hetzner", logbuch.Fields{
+				"err":     err,
+				"name":    cert.Hetzner.Name,
+				"lb_name": cert.Hetzner.LBName,
+				"lb_port": cert.Hetzner.LBPort,
+			})
+			continue
+		}
+
+		if currentHetznerCert != nil {
+			currentHetznerCert, _, err = client.Certificate.Update(context.Background(), currentHetznerCert, hcloud.CertificateUpdateOpts{
+				Name: currentHetznerCert.Name + "-old",
+			})
+
+			if err != nil {
+				logbuch.Error("Error updating current certificate on Hetzner", logbuch.Fields{
+					"err":     err,
+					"name":    cert.Hetzner.Name,
+					"lb_name": cert.Hetzner.LBName,
+					"lb_port": cert.Hetzner.LBPort,
+				})
+				continue
+			}
+		}
+
+		// create a new certificate
+		newHetznerCert, _, err := client.Certificate.Create(context.Background(), hcloud.CertificateCreateOpts{
+			Name:        cert.Hetzner.Name,
+			Certificate: cert.Certificate,
+			PrivateKey:  cert.PrivateKey,
+			Labels:      cert.Hetzner.Labels,
+		})
+
+		if err != nil {
+			logbuch.Error("Error creating certificate on Hetzner", logbuch.Fields{
+				"err":     err,
+				"name":    cert.Hetzner.Name,
+				"lb_name": cert.Hetzner.LBName,
+				"lb_port": cert.Hetzner.LBPort,
+			})
+			continue
+		}
+
+		// update the load balancer service
+		_, _, err = client.LoadBalancer.UpdateService(context.Background(), lb, cert.Hetzner.LBPort, hcloud.LoadBalancerUpdateServiceOpts{
+			HTTP: &hcloud.LoadBalancerUpdateServiceOptsHTTP{
+				Certificates: []*hcloud.Certificate{
+					newHetznerCert,
+				},
+			},
+		})
+
+		if err != nil {
+			logbuch.Error("Error updating load-balancer on Hetzner", logbuch.Fields{
+				"err":     err,
+				"name":    cert.Hetzner.Name,
+				"lb_name": cert.Hetzner.LBName,
+				"lb_port": cert.Hetzner.LBPort,
+			})
+			continue
+		}
+
+		// delete the old certificate
+		if currentHetznerCert != nil {
+			if _, err := client.Certificate.Delete(context.Background(), currentHetznerCert); err != nil {
+				logbuch.Error("Error deleting old certificate on Hetzner", logbuch.Fields{
+					"err":     err,
+					"name":    cert.Hetzner.Name,
+					"lb_name": cert.Hetzner.LBName,
+					"lb_port": cert.Hetzner.LBPort,
+				})
+				continue
+			}
+		}
+
+		logbuch.Info("Pushed certificate to Hetzner and updated load-balancer", logbuch.Fields{"name": cert.Hetzner.Name})
+	}
 }

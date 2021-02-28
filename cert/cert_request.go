@@ -20,4 +20,6 @@ type ACMEDNS struct {
 type Hetzner struct {
 	Name   string            `json:"name"`
 	Labels map[string]string `json:"labels"`
+	LBName string            `json:"lb_name"`
+	LBPort int               `json:"lb_port"`
 }
