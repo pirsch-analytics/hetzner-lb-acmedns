@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	// TODO configuration
+	// TODO move to configuration
 	caURL      = "https://acme-staging-v02.api.letsencrypt.org/directory"
 	acmednsURL = "https://auth.emvi-acme.com/"
 	renewIn    = time.Hour * 24 * 7 * 4 * 2 // two months
@@ -34,6 +34,12 @@ func UpdateCertificates() {
 		logbuch.Error("No certificate requests found. Please create the cert-requests.json", logbuch.Fields{"err": err})
 		return
 	}
+
+	if err := createCertificatesBackup(); err != nil {
+		return
+	}
+
+	// TODO load existing certificates and check if update is due
 
 	logbuch.Info("Obtaining certificates...")
 	certs := make([]Cert, 0, len(requests))
@@ -57,7 +63,33 @@ func UpdateCertificates() {
 	}
 
 	wg.Wait()
-	logbuch.Info("Done obtaining certificates. Saving...")
+	logbuch.Info("Done obtaining certificates")
+	saveCertificates(certs)
+}
+
+func createCertificatesBackup() error {
+	if _, err := os.Stat("data/certs.json"); err == nil {
+		logbuch.Info("Backing up old certificates...")
+		data, err := os.ReadFile("data/certs.json")
+
+		if err != nil {
+			logbuch.Error("Error reading existing certs.json", logbuch.Fields{"err": err})
+			return err
+		}
+
+		if err := os.WriteFile("data/certs_backup.json", data, 0644); err != nil {
+			logbuch.Error("Error writing certs.json backup file", logbuch.Fields{"err": err})
+			return err
+		}
+
+		logbuch.Info("Done backing up old certificates")
+	}
+
+	return nil
+}
+
+func saveCertificates(certs []Cert) {
+	logbuch.Info("Saving certificates...")
 	data, err := json.Marshal(certs)
 
 	if err != nil {
