@@ -304,22 +304,31 @@ func pushCertificates(hetznerAPIToken string, certs []Cert) {
 		}
 
 		// update the load balancer service
-		_, _, err = client.LoadBalancer.UpdateService(context.Background(), lb, cert.Hetzner.LBPort, hcloud.LoadBalancerUpdateServiceOpts{
-			HTTP: &hcloud.LoadBalancerUpdateServiceOptsHTTP{
-				Certificates: []*hcloud.Certificate{
-					newHetznerCert,
+		if lb != nil {
+			_, _, err = client.LoadBalancer.UpdateService(context.Background(), lb, cert.Hetzner.LBPort, hcloud.LoadBalancerUpdateServiceOpts{
+				HTTP: &hcloud.LoadBalancerUpdateServiceOptsHTTP{
+					Certificates: []*hcloud.Certificate{
+						newHetznerCert,
+					},
 				},
-			},
-		})
+			})
 
-		if err != nil {
-			logbuch.Error("Error updating load-balancer on Hetzner", logbuch.Fields{
+			if err != nil {
+				logbuch.Error("Error updating load-balancer on Hetzner", logbuch.Fields{
+					"err":     err,
+					"name":    cert.Hetzner.Name,
+					"lb_name": cert.Hetzner.LBName,
+					"lb_port": cert.Hetzner.LBPort,
+				})
+				continue
+			}
+		} else {
+			logbuch.Info("Hetzner load-balancer not found, skipping updating service", logbuch.Fields{
 				"err":     err,
 				"name":    cert.Hetzner.Name,
 				"lb_name": cert.Hetzner.LBName,
 				"lb_port": cert.Hetzner.LBPort,
 			})
-			continue
 		}
 
 		// delete the old certificate
